@@ -26,18 +26,26 @@ type Server struct{}
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" || r.Method == "HEAD" {
-		noteID := strings.TrimPrefix(r.URL.Path, "/")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf("You requested the note with the ID '%s'.", noteID)))
+		s.handleGET(w, r)
 		return
 	}
 
 	if r.Method == "POST" && r.URL.Path == "/" {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("You posted to /."))
+		s.handlePOST(w, r)
 		return
 	}
 
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("Not Found"))
+}
+
+func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("You posted to /."))
+}
+
+func (s *Server) handleGET(w http.ResponseWriter, r *http.Request) {
+	noteID := strings.TrimPrefix(r.URL.Path, "/")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf("You requested the note with the ID '%s'.", noteID)))
 }
