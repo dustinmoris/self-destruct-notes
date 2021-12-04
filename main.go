@@ -29,12 +29,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleGET(w, r)
 		return
 	}
-
 	if r.Method == "POST" && r.URL.Path == "/" {
 		s.handlePOST(w, r)
 		return
 	}
+	s.notFound(w, r)
+}
 
+func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("Not Found"))
 }
