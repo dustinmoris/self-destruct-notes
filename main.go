@@ -32,9 +32,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == "POST" && r.URL.Path == "/notes" {
+	if r.Method == "POST" && r.URL.Path == "/" {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("You posted to /notes."))
+		w.Write([]byte("You posted to /."))
 		return
 	}
 
