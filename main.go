@@ -2,13 +2,15 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"strings"
-	"text/template"
+	"time"
 
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -20,6 +22,11 @@ func main() {
 		port = "3000"
 	}
 	addr := ":" + port
+
+	baseURL := os.Getenv("BASE_URL")
+	if len(baseURL) == 0 {
+		baseURL = fmt.Sprintf("http://localhost:%s", port)
+	}
 
 	redisURL := os.Getenv("REDIS_URL")
 	if len(redisURL) == 0 {
@@ -38,6 +45,7 @@ func main() {
 		Redis: redisClient,
 	})
 	server := &Server{
+		BaseURL:    baseURL,
 		RedisCache: redisCache,
 	}
 
@@ -50,11 +58,20 @@ func main() {
 	}
 }
 
+type Note struct {
+	Data     []byte
+	Destruct bool
+}
+
 type Server struct {
+	BaseURL    string
 	RedisCache *cache.Cache
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Method == "GET" || r.Method == "HEAD" {
 		s.handleGET(w, r)
 		return
@@ -66,7 +83,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.notFound(w, r)
 }
 
-func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+func (s *Server) notFound(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("Not Found"))
 }
@@ -81,6 +101,14 @@ func (s *Server) badRequest(
 	w.Write([]byte(message))
 }
 
+func (s *Server) serverError(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte("Ops something went wrong. Please check the server logs."))
+}
+
 func (s *Server) renderTemplate(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -93,6 +121,27 @@ func (s *Server) renderTemplate(
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (s *Server) renderMessage(
+	w http.ResponseWriter,
+	r *http.Request,
+	title string,
+	paragraphs ...interface{},
+) {
+	s.renderTemplate(
+		w, r,
+		struct {
+			Title      string
+			Paragraphs []interface{}
+		}{
+			Title:      title,
+			Paragraphs: paragraphs,
+		},
+		"layout",
+		"dist/layout.html",
+		"dist/message.html",
+	)
 }
 
 func (s *Server) handlePOST(
@@ -110,9 +159,40 @@ func (s *Server) handlePOST(
 		s.badRequest(w, r, http.StatusBadRequest, "Invalid form data posted.")
 		return
 	}
+	form := r.PostForm
+
+	message := form.Get("message")
+	destruct := false
+	if form.Get("ttl") == "untilRead" {
+		destruct = true
+	}
+
+	key := uuid.NewString()
+	note := &Note{
+		Data:     []byte(message),
+		Destruct: destruct,
+	}
+
+	err = s.RedisCache.Set(
+		&cache.Item{
+			Ctx:            r.Context(),
+			Key:            key,
+			Value:          note,
+			TTL:            time.Hour * 24,
+			SkipLocalCache: true,
+		})
+	if err != nil {
+		s.serverError(w, r)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("You posted to /."))
+	noteURL := fmt.Sprintf("%s/%s", s.BaseURL, key)
+	s.renderMessage(
+		w, r,
+		"Note was successfully created",
+		template.HTML(
+			fmt.Sprintf("<a href='%s'>%s</a>", noteURL, noteURL)))
 }
 
 func (s *Server) handleGET(

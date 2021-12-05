@@ -54,15 +54,15 @@
 {{ define "content" }}
 
 <form method="POST" action="/">
-    <label for="note">Note:</label>
-    <textarea id="note" name="note"></textarea>
+    <label for="message">Note:</label>
+    <textarea id="message" name="message"></textarea>
     <div>
         <input type="radio" id="ttl24h" name="ttl" value="24h" checked>
         <label for="ttl24h">Self destruct after 24 hours</label>
     </div>
     <div>
-        <input type="radio" id="ttlAfterReading" name="ttl" value="afterReading">
-        <label for="ttlAfterReading">Self destruct after reading</label>
+        <input type="radio" id="ttlUntilRead" name="ttl" value="untilRead">
+        <label for="ttlUntilRead">Self destruct after reading</label>
     </div>
     <button type="submit">Create note</button>
 </form>
