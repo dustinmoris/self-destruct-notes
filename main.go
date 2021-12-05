@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
@@ -70,13 +71,61 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Not Found"))
 }
 
-func (s *Server) handlePOST(w http.ResponseWriter, r *http.Request) {
+func (s *Server) badRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	statusCode int,
+	message string,
+) {
+	w.WriteHeader(statusCode)
+	w.Write([]byte(message))
+}
+
+func (s *Server) renderTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+	data interface{},
+	name string,
+	files ...string,
+) {
+	t := template.Must(template.ParseFiles(files...))
+	err := t.ExecuteTemplate(w, name, data)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *Server) handlePOST(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	mediaType := r.Header.Get("Content-Type")
+	if mediaType != "application/x-www-form-urlencoded" {
+		s.badRequest(w, r, http.StatusUnsupportedMediaType, "Invalid media type posted.")
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		s.badRequest(w, r, http.StatusBadRequest, "Invalid form data posted.")
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("You posted to /."))
 }
 
-func (s *Server) handleGET(w http.ResponseWriter, r *http.Request) {
-	noteID := strings.TrimPrefix(r.URL.Path, "/")
+func (s *Server) handleGET(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	path := r.URL.Path
+	if path == "/" {
+		s.renderTemplate(w, r, nil, "layout", "dist/layout.html", "dist/index.html")
+		return
+	}
+
+	noteID := strings.TrimPrefix(path, "/")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf("You requested the note with the ID '%s'.", noteID)))
 }
