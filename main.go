@@ -5,24 +5,53 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/go-redis/cache/v8"
+	"github.com/go-redis/redis/v8"
 )
 
 func main() {
+
+	// Load settings:
+	// ---
 	port := os.Getenv("PORT")
 	if len(port) == 0 {
 		port = "3000"
 	}
 	addr := ":" + port
 
-	fmt.Printf("Starting web server, listening on %s\n", addr)
+	redisURL := os.Getenv("REDIS_URL")
+	if len(redisURL) == 0 {
+		redisURL = "redis://:@localhost:6379/1"
+	}
 
-	err := http.ListenAndServe(addr, &Server{})
+	// Bootstrap:
+	// ---
+	redisOptions, err := redis.ParseURL(redisURL)
+	if err != nil {
+		panic(err)
+	}
+	redisClient := redis.NewClient(redisOptions)
+	defer redisClient.Close()
+	redisCache := cache.New(&cache.Options{
+		Redis: redisClient,
+	})
+	server := &Server{
+		RedisCache: redisCache,
+	}
+
+	// Start web server:
+	// ---
+	fmt.Printf("Starting web server, listening on %s\n", addr)
+	err = http.ListenAndServe(addr, server)
 	if err != nil {
 		panic(err)
 	}
 }
 
-type Server struct{}
+type Server struct {
+	RedisCache *cache.Cache
+}
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" || r.Method == "HEAD" {
