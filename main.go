@@ -150,38 +150,47 @@ func (s *Server) handlePOST(
 ) {
 	mediaType := r.Header.Get("Content-Type")
 	if mediaType != "application/x-www-form-urlencoded" {
-		s.badRequest(w, r, http.StatusUnsupportedMediaType, "Invalid media type posted.")
+		s.badRequest(
+			w, r,
+			http.StatusUnsupportedMediaType,
+			"Invalid media type posted.")
 		return
 	}
 
 	err := r.ParseForm()
 	if err != nil {
-		s.badRequest(w, r, http.StatusBadRequest, "Invalid form data posted.")
+		s.badRequest(
+			w, r,
+			http.StatusBadRequest,
+			"Invalid form data posted.")
 		return
 	}
 	form := r.PostForm
 
 	message := form.Get("message")
 	destruct := false
+	ttl := time.Hour * 24
 	if form.Get("ttl") == "untilRead" {
 		destruct = true
+		ttl = ttl * 365
 	}
 
-	key := uuid.NewString()
 	note := &Note{
 		Data:     []byte(message),
 		Destruct: destruct,
 	}
 
+	key := uuid.NewString()
 	err = s.RedisCache.Set(
 		&cache.Item{
 			Ctx:            r.Context(),
 			Key:            key,
 			Value:          note,
-			TTL:            time.Hour * 24,
+			TTL:            ttl,
 			SkipLocalCache: true,
 		})
 	if err != nil {
+		fmt.Println(err)
 		s.serverError(w, r)
 		return
 	}
@@ -206,6 +215,30 @@ func (s *Server) handleGET(
 	}
 
 	noteID := strings.TrimPrefix(path, "/")
+
+	ctx := r.Context()
+	note := &Note{}
+	err := s.RedisCache.GetSkippingLocalCache(
+		ctx,
+		noteID,
+		note)
+	if err != nil {
+		s.badRequest(
+			w, r,
+			http.StatusNotFound,
+			fmt.Sprintf("Note with ID %s does not exist.", noteID))
+		return
+	}
+
+	if note.Destruct {
+		err := s.RedisCache.Delete(ctx, noteID)
+		if err != nil {
+			fmt.Println(err)
+			s.serverError(w, r)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("You requested the note with the ID '%s'.", noteID)))
+	w.Write(note.Data)
 }
