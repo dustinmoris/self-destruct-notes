@@ -210,7 +210,11 @@ func (s *Server) handleGET(
 ) {
 	path := r.URL.Path
 	if path == "/" {
-		s.renderTemplate(w, r, nil, "layout", "dist/layout.html", "dist/index.html")
+		s.renderTemplate(
+			w, r, nil,
+			"layout",
+			"dist/layout.html",
+			"dist/index.html")
 		return
 	}
 
